@@ -14,14 +14,16 @@ class ResNet(nn.Module):
         super().__init__()
 
         self.resnet = torchvision.models.resnet18(weights='IMAGENET1K_V1')
+        self.resnet.fc = nn.Linear(512,20)
         # for params in self.resnet.parameters():
         #     params.requires_grad = False
         ##################################################################
         # TODO: Define a FC layer here to process the features
         ##################################################################
-        # self.gelu = torch.nn.GeLU()
-        self.drop = torch.nn.Dropout(p=0.2)
-        self.linear = torch.nn.Linear(1000,20)
+        # # self.gelu = torch.nn.GeLU()
+        # self.drop = torch.nn.Dropout(p=0.2)
+        # self.linear = torch.nn.Linear(1000,20)
+
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
@@ -31,8 +33,7 @@ class ResNet(nn.Module):
         # TODO: Return unnormalized log-probabilities here
         ##################################################################
         x = self.resnet(x)
-        out = self.linear(self.drop(x))
-        return out
+        return x
         ##################################################################
         #                          END OF YOUR CODE                      #
         ##################################################################
@@ -55,10 +56,10 @@ if __name__ == "__main__":
         inp_size=224,
         use_cuda=True,
         val_every=70,
-        lr = 0.0004,
+        lr = 0.0003,
         batch_size=100,
         step_size=10,
-        gamma=0.4#TODO
+        gamma=0.3#TODO
     )
     ##################################################################
     #                          END OF YOUR CODE                      #
