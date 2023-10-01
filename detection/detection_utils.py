@@ -253,12 +253,21 @@ def get_fpn_location_coords(
         level_name: None for level_name, _ in shape_per_fpn_level.items()
     }
 
+
     for level_name, feat_shape in shape_per_fpn_level.items():
         level_stride = strides_per_fpn_level[level_name]
+        H_W = shape_per_fpn_level[level_name][2]
+        location_coords[level_name] = torch.zeros(H_W**2,2)
         ##################################################################–####
         # TODO: Implement logic to get location co-ordinates below.          #
         ######################################################################
-        pass
+        count = 0
+        for i in range(shape_per_fpn_level[level_name][2]):
+            for j in range(shape_per_fpn_level[level_name][2]):
+                location_coords[level_name][count,0] = level_stride/2 + i*level_stride
+                location_coords[level_name][count,1] = level_stride/2 + j*level_stride
+                count += 1
+
         ######################################################################
         #                             END OF YOUR CODE                       #
         ######################################################################
