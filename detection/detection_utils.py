@@ -62,7 +62,10 @@ def fcos_match_locations_to_gt(
         stride = strides_per_fpn_level[level_name]
 
         x, y = centers.unsqueeze(dim=2).unbind(dim=1)
+        x, y = x.to("cuda"), y.to("cuda")
         x0, y0, x1, y1 = gt_boxes[:, :4].unsqueeze(dim=0).unbind(dim=2)
+        # print("x0.device")
+        # print(x0.device)
         pairwise_dist = torch.stack([x - x0, y - y0, x1 - x, y1 - y], dim=2)
 
         # Pairwise distance between every feature center and GT box edges:
@@ -139,8 +142,18 @@ def fcos_get_deltas_from_locations(
     ##########################################################################
     # Set this to Tensor of shape (N, 4) giving deltas (left, top, right, bottom)
     # from the locations to GT box edges, normalized by FPN stride.
-    deltas = None
-    pass
+    N = locations.size(dim = 0)
+    deltas = -torch.ones(N,4).to("cuda")
+    for i in range(N):
+        if torch.all(torch.eq(gt_boxes[i,:4],-torch.ones(4).to("cuda"))):
+            continue
+        else:
+            x = locations[i,0]
+            y = locations[i,1]
+            deltas[i,0] = (x - gt_boxes[i,0])/stride 
+            deltas[i,1] = (y - gt_boxes[i,1])/stride
+            deltas[i,2] = (gt_boxes[i,2] - x)/stride
+            deltas[i,3] = (gt_boxes[i,3] - y)/stride
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -181,7 +194,16 @@ def fcos_apply_deltas_to_locations(
     # for our use-case because the feature center must lie INSIDE the final  #
     # box. Make sure to clip them to zero.                                   #
     ##########################################################################
-    output_boxes = None
+    N = deltas.size(dim=0)
+    output_boxes = -torch.ones(N,4)
+
+    for i in range(N):
+
+        xl = locations[i,0] - torch.clamp(deltas[i,0], min=0)*stride
+        yl = locations[i,1] - stride*torch.clamp(deltas[i,1], min=0)
+        xr = stride*torch.clamp(deltas[i,2], min=0) + locations[i,0]
+        yr = locations[i,1] + torch.clamp(deltas[i,3], min=0)*stride
+        output_boxes[i] = torch.Tensor([xl,yl,xr,yr])
 
     ##########################################################################
     #                             END OF YOUR CODE                           #
@@ -215,7 +237,17 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
     #   (max(left, right) * max(top, bottom))
     # )
     ##########################################################################
-    centerness = None
+    N = deltas.size(dim = 0)
+    centerness = -torch.ones(N,)
+    for i in range(N):
+        if (deltas[i,0] == -1):
+            continue
+        else:
+            l_r = torch.Tensor([deltas[i,0], deltas[i,2]])
+            t_b = torch.Tensor([deltas[i,1], deltas[i,3]])
+            calc = torch.sqrt((torch.min(l_r)*torch.min(t_b))
+                              / (torch.max(l_r)*torch.max(t_b)))
+            centerness[i] = calc
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################

@@ -20,6 +20,8 @@ from dataclasses import dataclass
 import os
 import matplotlib.pyplot as plt
 import torch
+import numpy as np
+
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid
@@ -118,7 +120,8 @@ def visualize_gt(train_dataset, val_dataset):
         # Remove padded boxes from visualization.
         is_valid = gt_boxes[:, 4] >= 0
         img = detection_visualizer(image, val_dataset.idx_to_class, gt_boxes[is_valid])
-        gt_images.append(torch.from_numpy(img))
+        gt_images.append(torch.from_numpy(np.array(img, copy=True)))
+        #gt_images.append(torch.from_numpy(img))
     
     img_grid = make_grid(gt_images, nrow=8)
     writer.add_image("train/gt_images", img_grid, global_step=idx)
