@@ -519,6 +519,7 @@ class FCOS(nn.Module):
         pred_boxes_all_levels = []
         pred_classes_all_levels = []
         pred_scores_all_levels = []
+        strides = {"p3": 8, "p4": 16, "p5": 32}
 
         for level_name in locations_per_fpn_level.keys():
 
@@ -545,32 +546,42 @@ class FCOS(nn.Module):
             #      and width of input image.
             ##################################################################
             # Feel free to delete this line: (but keep variable names same)
-            level_pred_boxes, level_pred_classes, level_pred_scores = (
-                None,
-                None,
-                None,  # Need tensors of shape: (N, 4) (N, ) (N, )
+            N = level_cls_logits.size(dim = 0)
+            level_pred_boxes, level_pred_classes, level_pred_score= (
+                torch.zeros(N,4),
+                torch.zeros(N),
+                torch.zeros(N)
             )
 
             # Compute geometric mean of class logits and centerness:
             level_pred_scores = torch.sqrt(
                 level_cls_logits.sigmoid_() * level_ctr_logits.sigmoid_()
             )
+            
             # Step 1:
             # Replace "pass" statement with your code
-            pass
+            for i in range(N):
+                level_pred_classes[i] = torch.argmax(level_pred_scores[i].item())
+                level_pred_score[i] = torch.max(level_pred_scores[i])
             
             # Step 2:
             # Replace "pass" statement with your code
-            pass
+            level_delta = level_deltas[level_pred_score > test_score_thresh]
+            level_location = level_locations[level_pred_score > test_score_thresh]
 
             # Step 3:
             # Replace "pass" statement with your code
-            pass
-
+            level_pred_boxes = fcos_apply_deltas_to_locations(level_delta, level_location, strides[level_name])
+            image = images[0] # Remove batch size
+            H = image.size(dim = 0)
+            W = image.size(dim = 1)
             # Step 4: Use `images` to get (height, width) for clipping.
             # Replace "pass" statement with your code
-            pass
-
+            for i in range(len(level_pred_boxes)):
+                level_pred_boxes[i,0] = torch.clamp(level_pred_boxes[i,0], min = 0)
+                level_pred_boxes[i,1] = torch.clamp(level_pred_boxes[i,1], min = 0)
+                level_pred_boxes[i,2] = torch.clamp(level_pred_boxes[i,2], max = W)
+                level_pred_boxes[i,3] = torch.clamp(level_pred_boxes[i,3], max = H)
             ##################################################################
             #                          END OF YOUR CODE                      #
             ##################################################################
