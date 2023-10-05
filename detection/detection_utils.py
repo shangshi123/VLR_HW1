@@ -64,7 +64,8 @@ def fcos_match_locations_to_gt(
         x, y = centers.unsqueeze(dim=2).unbind(dim=1)
         x, y = x.to("cuda"), y.to("cuda")
         x0, y0, x1, y1 = gt_boxes[:, :4].unsqueeze(dim=0).unbind(dim=2)
-        # print("x0.device")
+        # 
+        # ("x0.device")
         # print(x0.device)
         pairwise_dist = torch.stack([x - x0, y - y0, x1 - x, y1 - y], dim=2)
 
@@ -142,18 +143,32 @@ def fcos_get_deltas_from_locations(
     ##########################################################################
     # Set this to Tensor of shape (N, 4) giving deltas (left, top, right, bottom)
     # from the locations to GT box edges, normalized by FPN stride.
-    N = locations.size(dim = 0)
-    deltas = -torch.ones(N,4).to("cuda")
-    for i in range(N):
-        if torch.all(torch.eq(gt_boxes[i,:4],-torch.ones(4).to("cuda"))):
-            continue
-        else:
-            x = locations[i,0]
-            y = locations[i,1]
-            deltas[i,0] = (x - gt_boxes[i,0])/stride 
-            deltas[i,1] = (y - gt_boxes[i,1])/stride
-            deltas[i,2] = (gt_boxes[i,2] - x)/stride
-            deltas[i,3] = (gt_boxes[i,3] - y)/stride
+    # N = locations.size(dim = 0)
+    # deltas = -torch.ones(N,4)
+    # for i in range(N):
+    #     if torch.all(torch.eq(gt_boxes[i,:4],-torch.ones(4).to("cuda"))):
+    #         continue
+    #     else:
+    #         x = locations[i,0]
+    #         y = locations[i,1]
+    #         deltas[i,0] = (x - gt_boxes[i,0])/stride 
+    #         deltas[i,1] = (y-gt_boxes[i,1])/stride
+    #         deltas[i,2] = (gt_boxes[i,2] - x)/stride
+    #         deltas[i,3] = (gt_boxes[i,3]-y)/stride
+
+
+    x = locations[:,0]
+    y = locations[:,1]
+    deltasl = (x - gt_boxes[:,0])/stride 
+    deltast = (y-gt_boxes[:,1])/stride
+    deltasr = (gt_boxes[:,2] - x)/stride
+    deltasb = (gt_boxes[:,3]-y)/stride
+
+    deltas = torch.stack([deltasl, deltast,deltasr,deltasb],dim = 1)
+    # print(deltas.size())
+    # print(gt_boxes.size())
+    deltas[gt_boxes[:,0]<0] = -1 
+    # print(deltas)
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -194,16 +209,23 @@ def fcos_apply_deltas_to_locations(
     # for our use-case because the feature center must lie INSIDE the final  #
     # box. Make sure to clip them to zero.                                   #
     ##########################################################################
-    N = deltas.size(dim=0)
-    output_boxes = -torch.ones(N,4)
+    # N = deltas.size(dim=0)
+    # output_boxes = -torch.ones(N,4)
 
-    for i in range(N):
+    # for i in range(N):
 
-        xl = locations[i,0] - torch.clamp(deltas[i,0], min=0)*stride
-        yl = locations[i,1] - stride*torch.clamp(deltas[i,1], min=0)
-        xr = stride*torch.clamp(deltas[i,2], min=0) + locations[i,0]
-        yr = locations[i,1] + torch.clamp(deltas[i,3], min=0)*stride
-        output_boxes[i] = torch.Tensor([xl,yl,xr,yr])
+    #     xl = locations[i,0] - torch.clamp(deltas[i,0], min=0)*stride
+    #     yl = locations[i,1] - stride*torch.clamp(deltas[i,1], min=0)
+    #     xr = stride*torch.clamp(deltas[i,2], min=0) + locations[i,0]
+    #     yr = locations[i,1] + torch.clamp(deltas[i,3], min=0)*stride
+    #     output_boxes[i] = torch.Tensor([xl,yl,xr,yr])
+
+    xl = locations[:,0] - torch.clamp(deltas[:,0], min=0)*stride
+    yl = locations[:,1] - stride*torch.clamp(deltas[:,1], min=0)
+    xr = stride*torch.clamp(deltas[:,2], min=0) + locations[:,0]
+    yr = locations[:,1] + torch.clamp(deltas[:,3], min=0)*stride
+    output_boxes = torch.stack((xl,yl,xr,yr), dim = 1)
+
 
     ##########################################################################
     #                             END OF YOUR CODE                           #
@@ -238,16 +260,25 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
     # )
     ##########################################################################
     N = deltas.size(dim = 0)
-    centerness = -torch.ones(N,)
-    for i in range(N):
-        if (deltas[i,0] == -1):
-            continue
-        else:
-            l_r = torch.Tensor([deltas[i,0], deltas[i,2]])
-            t_b = torch.Tensor([deltas[i,1], deltas[i,3]])
-            calc = torch.sqrt((torch.min(l_r)*torch.min(t_b))
-                              / (torch.max(l_r)*torch.max(t_b)))
-            centerness[i] = calc
+    # centerness = -torch.ones(N,)
+    # for i in range(N):
+    #     if (deltas[i,0] == -1):
+    #         continue
+    #     else:
+    #         l_r = torch.Tensor([deltas[i,0], deltas[i,2]])
+    #         t_b = torch.Tensor([deltas[i,1], deltas[i,3]])
+    #         calc = torch.sqrt((torch.min(l_r)*torch.min(t_b))
+    #                           / (torch.max(l_r)*torch.max(t_b)))
+    #         centerness[i] = calc
+    l = deltas[:,0]
+    r = deltas[:,2]
+    t = deltas[:,1]
+    b = deltas[:,3]
+
+    centerness = torch.sqrt((torch.minimum(l,r)*torch.minimum(t,b))
+                        / (torch.maximum(l,r)*torch.maximum(t,b)))
+    
+    centerness[deltas[:,0]<0] = -1
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -288,17 +319,26 @@ def get_fpn_location_coords(
 
     for level_name, feat_shape in shape_per_fpn_level.items():
         level_stride = strides_per_fpn_level[level_name]
-        H_W = shape_per_fpn_level[level_name][2]
-        location_coords[level_name] = torch.zeros(H_W**2,2)
+        B,C,H,W = feat_shape
+
+        # location_coords[level_name] = torch.zeros(H_W**2,2)
         ##################################################################–####
         # TODO: Implement logic to get location co-ordinates below.          #
         ######################################################################
-        count = 0
-        for i in range(shape_per_fpn_level[level_name][2]):
-            for j in range(shape_per_fpn_level[level_name][2]):
-                location_coords[level_name][count,0] = level_stride/2 + i*level_stride
-                location_coords[level_name][count,1] = level_stride/2 + j*level_stride
-                count += 1
+        # count = 0
+        # for i in range(shape_per_fpn_level[level_name][2]):
+        #     for j in range(shape_per_fpn_level[level_name][2]):
+        #         location_coords[level_name][count,0] = level_stride/2 + i*level_stride
+        #         location_coords[level_name][count,1] = level_stride/2 + j*level_stride
+        #         count += 1
+
+        xcoords, ycoords = torch.meshgrid(torch.arange(0,W),torch.arange(0,H))
+
+        xcoords = (level_stride/2) + (xcoords.flatten()*level_stride)
+        ycoords = (level_stride/2) + (ycoords.flatten()*level_stride)
+
+        locations = torch.stack((xcoords,ycoords), dim=1)
+        location_coords[level_name] = locations
 
         ######################################################################
         #                             END OF YOUR CODE                       #
