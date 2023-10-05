@@ -61,7 +61,7 @@ class HyperParameters:
 def create_dataset_and_dataloaders(subset=False):
     train_dataset = VOC2007DetectionTiny(
         DATASET_PATH, "train", image_size=IMAGE_SHAPE[0],
-        download=True# True (set to False after the first time)
+        download=False# True (set to False after the first time)
     )
     if subset:
         small_dataset = torch.utils.data.Subset(
@@ -195,6 +195,16 @@ def main(args):
     else:
         print("Running inference and computing mAP...")
         assert os.path.exists("mAP")
+
+        # Modify this depending on where you save your weights.
+        weights_path = os.path.join(".", "fcos_detector.pt")
+
+        # Re-initialize so this cell is independent from prior cells.
+        detector = FCOS(
+            num_classes=NUM_CLASSES, fpn_channels=128, stem_channels=[128, 128]
+        )
+        detector.to(device=DEVICE)
+        detector.load_state_dict(torch.load(weights_path, map_location="cpu"))
         inference_with_detector(
             detector,
             val_loader,
